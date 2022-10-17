@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=62", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kalman-experiments"
+dynamic = ["version"]
+description = "Kalman smoothing variance identification experiments"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+keywords = ["Machine Learning", "Science", "Mathematics", "Experiments"]
+authors = [
+  {email = "jacob.stevens.haas@gmail.com", name = "Jake Stevens-Haas"}
+]
+classifiers = [
+  "Development Status :: 1 - Planning",
+  "Programming Language :: Python",
+  "Framework :: Jupyter",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Natural Language :: English",
+  "Operating System :: POSIX :: Linux",
+]
+# Since the point of the package is reproducibility, incl. all dev
+# dependencies
+dependencies = [
+  "mitosis @ git+https://github.com/Jacob-Stevens-Haas/mitosis",
+  "pytest >= 6.0.0",
+  "pytest-cov",
+  "flake8",
+  "flake8-comprehensions>=3.1.0",
+  "matplotlib",
+  "black",
+  "coverage",
+  "pre-commit",
+  "sphinx",
+  "codecov",
+  "seaborn"
+]
+
+[project.urls]
+homepage = "https://github.com/Jake-Stevens-Haas/kalman-experiments"
+
+[tool.setuptools_scm]
+
+[tool.black]
+line-length = 88
+extend-exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.venv
+  | .vscode
+  | version.py
+  | build
+  | dist
+  | env
+)/
+'''
+preview = 1
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore::RuntimeWarning",
+  "ignore::UserWarning",]
+addopts = '-m "not slow"'
+markers = ["slow"]
