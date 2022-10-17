@@ -36,7 +36,9 @@ dependencies = [
   "pre-commit",
   "sphinx",
   "codecov",
-  "seaborn"
+  "seaborn",
+  "numpy",
+  "scipy"
 ]
 
 [project.urls]

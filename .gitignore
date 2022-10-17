@@ -1,3 +1,5 @@
 env
 commit-msg
 todo
+*.egg-info
+__pycache__
