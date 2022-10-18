@@ -1,7 +1,7 @@
+from pathlib import Path
+
 import numpy as np
 from scipy import sparse
-from pathlib import Path
-import mitosis
 
 tuners = {}
 
@@ -14,27 +14,26 @@ def register_tuner(name):
     return decorator
 
 
-def gen_data(seed, *, stop=1, dt=None, nt=None, meas_var = .1, process_var = 1):
+def gen_data(seed, *, stop=1, dt=None, nt=None, meas_var=0.1, process_var=1):
     rng = np.random.default_rng(seed)
     if dt is None and nt is None:
         raise ValueError("Either dt or nt must be provided")
     elif nt is not None:
         times = np.linspace(0, stop, nt)
-        dt = times[1]-times[0]
+        dt = times[1] - times[0]
     else:
         times = np.arange(0, stop, dt)
-    delta_times = times[1:] - times[:-1]
     n = len(times)
     Qs = [
-        np.array([[dt, dt**2 / 2], [dt**2 / 2, dt**3 / 3]]) for _ in range(n-1)
+        np.array([[dt, dt**2 / 2], [dt**2 / 2, dt**3 / 3]]) for _ in range(n - 1)
     ]
     Q = process_var * sparse.block_diag(Qs)
-    x = rng.multivariate_normal(np.zeros(2*n-2), Q.toarray())
+    x = rng.multivariate_normal(np.zeros(2 * n - 2), Q.toarray())
     H = sparse.lil_matrix((n, 2 * n))
     H[:, 1::2] = sparse.eye(n)
-    dx = H[:-1,:-2] @ x
+    dx = H[:-1, :-2] @ x
     x_true = np.concatenate((np.zeros(1), dx.cumsum()))
-    dx_dot = H[:-1,1:-1] @ x
+    dx_dot = H[:-1, 1:-1] @ x
     x_dot_true = np.concatenate((np.zeros(1), dx_dot.cumsum()))
     measurements = rng.normal(x_true, meas_var)
 
@@ -44,17 +43,22 @@ def gen_data(seed, *, stop=1, dt=None, nt=None, meas_var = .1, process_var = 1):
 def run(seed, sim_params={}, solver_params={}, trials_folder=Path(__file__)):
     meas_var = sim_params["meas_var"]
     measurements, x_true, x_dot_true, obs_operator, times = gen_data(seed, **sim_params)
-    process_var = tuners[solver_params["tuner"]](measurements, obs_operator, times, meas_var)
-    alpha = meas_var / process_var
-    x_hat, x_dot_hat = solve(
-        measurements, obs_operator, times, alpha
+    process_var = tuners[solver_params["tuner"]](
+        measurements, obs_operator, times, meas_var
     )
+    alpha = meas_var / process_var
+    x_hat, x_dot_hat = solve(measurements, obs_operator, times, alpha)
+    metrics = {
+        "posit_mse": ((x_hat - x_true) ** 2).mean(),
+        "vel_mse": ((x_dot_hat - x_dot_true) ** 2).mean(),
+    }
+    return metrics
 
 
 def solve(measurements, obs_operator, times, alpha):
     H = obs_operator
     z = measurements
-    
+
     delta_times = times[1:] - times[:-1]
     n = len(times)
     Qs = [
