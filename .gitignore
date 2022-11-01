@@ -1,5 +1,6 @@
 commit-msg
 todo
+kal_exp/data/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
