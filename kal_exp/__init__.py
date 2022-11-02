@@ -15,6 +15,10 @@ def register_tuner(name):
 
 
 def gen_data(seed, *, stop=1, dt=None, nt=None, meas_var=0.1, process_var=1):
+    """Generate trajectory and measurements for a Kalman process.
+    
+    Always starts at origin
+    """
     rng = np.random.default_rng(seed)
     if dt is None and nt is None:
         raise ValueError("Either dt or nt must be provided")
@@ -80,4 +84,4 @@ def solve(measurements, obs_operator, times, alpha):
     sol = np.linalg.solve(lhs.toarray(), rhs)
     x_hat = (H @ sol).flatten()
     x_dot_hat = (H[:, list(range(1, 2 * n)) + [0]] @ sol).flatten()
-    return x_hat, x_dot_hat
+    return x_hat, x_dot_hat, G, Qinv
