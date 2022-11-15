@@ -56,6 +56,14 @@ def test_gen_data_normal(sample_data, sigma_x):
 
 
 def test_solve(sample_data, sigma_z, sigma_x):
+    measurements, x_true, x_dot_true, H, times = sample_data
+    x_hat, x_dot_hat, G, Qinv = kal_exp.solve(measurements, H, times, sigma_z, sigma_x)
+    mse = np.sqrt(np.linalg.norm(x_hat-x_true) ** 2 / len(x_true))
+    assert mse < .05
+
+
+
+def test_solve_variance(sample_data, sigma_z, sigma_x):
     """Kolmogorov Smirnov test for normality of x_hat w/appropriate mean/variance
 
     x_hat = (G^TQ^{-1}G + H^TR^{-1}H)^{-1}H^TR^{-1}z
@@ -72,7 +80,7 @@ def test_solve(sample_data, sigma_z, sigma_x):
     a vector of IID standard normal samples
     """
     measurements, x_true, x_dot_true, H, times = sample_data
-    x_hat, x_dot_hat, G, Qinv = kal_exp.solve(measurements, H, times, sigma_z / sigma_x)
+    x_hat, x_dot_hat, G, Qinv = kal_exp.solve(measurements, H, times, sigma_z, sigma_x)
 
     n = len(x_true)
     x_solve = kal_exp.restack(x_hat, x_dot_hat)
