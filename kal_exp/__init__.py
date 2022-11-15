@@ -54,10 +54,10 @@ def gen_data(seed, *, stop=1, dt=None, nt=None, meas_var=0.1, process_var=1):
     x = rng.multivariate_normal(np.zeros(2 * n - 2), Q.toarray())
     H = sparse.lil_matrix((n, 2 * n))
     H[:, 1::2] = sparse.eye(n)
-    dx = H[:-1, :-2] @ x
-    x_true = np.concatenate((np.zeros(1), dx.cumsum()))
     dx_dot = H[:-1, 1:-1] @ x
     x_dot_true = np.concatenate((np.zeros(1), dx_dot.cumsum()))
+    dx = H[:-1, :-2] @ x + dt * x_dot_true[:-1]
+    x_true = np.concatenate((np.zeros(1), dx.cumsum()))
     measurements = rng.normal(x_true, meas_var)
 
     return measurements, x_true, x_dot_true, H, times

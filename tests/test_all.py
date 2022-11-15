@@ -43,7 +43,7 @@ def test_gen_data_normal(sample_data, sigma_x):
     # Kolmogorov Smirnov test for normality of marginal distributions 
     # of x_true and x_dot_true w/appropriate mean/variance
     delta_times = times[1:] - times[:-1]
-    delta_x = x_true[1:] - x_true[:-1]
+    delta_x = x_true[1:] - x_true[:-1] - delta_times * x_dot_true[:-1]
     delta_xdot = x_dot_true[1:] - x_dot_true[:-1]
     p_x = stats.kstest(delta_x / np.sqrt(sigma_x * delta_times**3 / 3), stats.norm.cdf).pvalue
     p_xdot = stats.kstest(delta_xdot / np.sqrt(sigma_x * delta_times), stats.norm.cdf).pvalue
