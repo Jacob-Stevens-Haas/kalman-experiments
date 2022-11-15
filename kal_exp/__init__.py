@@ -16,7 +16,7 @@ def register_tuner(name):
 
 def gen_data(seed, *, stop=1, dt=None, nt=None, meas_var=0.1, process_var=1):
     """Generate trajectory and measurements for a Kalman process.
-    
+
     Always starts at origin
     """
     rng = np.random.default_rng(seed)
@@ -78,10 +78,21 @@ def solve(measurements, obs_operator, times, alpha):
 
     H = sparse.lil_matrix((n, 2 * n))
     H[:, 1::2] = sparse.eye(n)
-
+    
     rhs = H.T @ z.reshape((-1, 1))
     lhs = H.T @ H + G.T @ Qinv @ G
     sol = np.linalg.solve(lhs.toarray(), rhs)
     x_hat = (H @ sol).flatten()
     x_dot_hat = (H[:, list(range(1, 2 * n)) + [0]] @ sol).flatten()
     return x_hat, x_dot_hat, G, Qinv
+
+def restack(x, x_dot):
+    """Interleave x and x_dot to get vector represented by Kalman eqns
+    
+    Assumes first axis is time.
+    """
+    output_shape = (x.shape[0] + x_dot.shape[0], *x.shape[1:])
+    c = np.empty(output_shape)
+    c[0::2] = x_dot
+    c[1::2] = x
+    return c
