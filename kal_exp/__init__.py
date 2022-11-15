@@ -83,31 +83,80 @@ def solve(measurements, obs_operator, times, alpha):
     z = measurements
 
     delta_times = times[1:] - times[:-1]
-    n = len(times)
-    Qs = [
-        np.array([[dt, dt**2 / 2], [dt**2 / 2, dt**3 / 3]]) for dt in delta_times
-    ]
-    Qinv = alpha * sparse.block_diag([np.linalg.inv(Q) for Q in Qs])
-    Qinv = (Qinv + Qinv.T) / 2  # force to be symmetric
+    T = len(times)
+    Qinv = gen_Qinv(delta_times, alpha)
+    G = gen_G(delta_times)
 
-    G_left = sparse.block_diag([-np.array([[1, 0], [dt, 1]]) for dt in delta_times])
-    G_right = sparse.eye(2 * (n - 1))
-    align_cols = sparse.csc_matrix((2 * (n - 1), 2))
-    G = sparse.hstack((G_left, align_cols)) + sparse.hstack((align_cols, G_right))
+    H = sparse.lil_matrix((T, 2 * T))
+    H[:, 1::2] = sparse.eye(T)
 
-    H = sparse.lil_matrix((n, 2 * n))
-    H[:, 1::2] = sparse.eye(n)
-    
     rhs = H.T @ z.reshape((-1, 1))
     lhs = H.T @ H + G.T @ Qinv @ G
     sol = np.linalg.solve(lhs.toarray(), rhs)
     x_hat = (H @ sol).flatten()
-    x_dot_hat = (H[:, list(range(1, 2 * n)) + [0]] @ sol).flatten()
+    x_dot_hat = (H[:, list(range(1, 2 * T)) + [0]] @ sol).flatten()
     return x_hat, x_dot_hat, G, Qinv
+
+
+def gen_G(delta_times):
+    T = len(delta_times) + 1
+    G_left = sparse.block_diag([-np.array([[1, 0], [dt, 1]]) for dt in delta_times])
+    G_right = sparse.eye(2 * (T - 1))
+    align_cols = sparse.csc_matrix((2 * (T - 1), 2))
+    return sparse.hstack((G_left, align_cols)) + sparse.hstack((align_cols, G_right))
+
+
+def gen_Qinv(delta_times, alpha):
+    Qs = [
+        np.array([[dt, dt**2 / 2], [dt**2 / 2, dt**3 / 3]]) for dt in delta_times
+    ]
+    Qinv = alpha * sparse.block_diag([np.linalg.inv(Q) for Q in Qs])
+    return (Qinv + Qinv.T) / 2  # ensure symmetry
+
+
+def solve_prior(measurements, obs_operator, times, alpha, sigma_tilde, x0=None):
+    H = obs_operator
+    z = measurements
+    T = len(times)
+    eps = 0.1
+    if x0 is None:
+        x0 = np.zeros((2 * T, 1))
+    delta_times = times[1:] - times[:-1]
+    Qinv = gen_Qinv(delta_times, 1)
+    G = gen_G(delta_times)
+    Rinv = np.eye(len(measurements))
+    # Precomputations
+    Sigma = H.T @ Rinv @ H
+    Pi = G.T @ Qinv @ G
+    subtract = H.T @ Rinv @ z
+    log_coef = T + 1 + eps
+    log_add = (2 + 2 * eps) * sigma_tilde
+
+    def grad(x):
+        return (
+            # H.T @ Rinv @ (H @ x - z)
+            Sigma @ x
+            - subtract
+            # + (T+1+eps)* np.log((x.T @ G.T @ Qinv @ G @ x) + (2+2*eps)*sigma_tilde)
+            + log_coef * Pi @ x / ((x.T @ Pi @ x) + log_add)
+        )
+
+    def objective(x):
+        # ||Hx - z||_Rinv^2 + (T+1+eps)*log(||Gx||^2_Qinv + (2+2eps)*sigma_tilde)
+        return (
+            x.T @ Pi @ x
+            - 2 * subtract.T @ x
+            + log_coef * np.log(x.T @ Pi @ x + log_add)
+        )
+
+    for i in range(10):
+        pass
+    pass
+
 
 def restack(x, x_dot):
     """Interleave x and x_dot to get vector represented by Kalman eqns
-    
+
     Assumes first axis is time.
     """
     output_shape = (x.shape[0] + x_dot.shape[0], *x.shape[1:])
