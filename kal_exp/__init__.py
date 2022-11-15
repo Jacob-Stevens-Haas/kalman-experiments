@@ -69,8 +69,7 @@ def run(seed, sim_params={}, solver_params={}, trials_folder=Path(__file__)):
     process_var = tuners[solver_params["tuner"]](
         measurements, obs_operator, times, meas_var
     )
-    alpha = meas_var / process_var
-    x_hat, x_dot_hat = solve(measurements, obs_operator, times, alpha)
+    x_hat, x_dot_hat = solve(measurements, obs_operator, times, meas_var, process_var)
     metrics = {
         "posit_mse": ((x_hat - x_true) ** 2).mean(),
         "vel_mse": ((x_dot_hat - x_dot_true) ** 2).mean(),
@@ -78,24 +77,22 @@ def run(seed, sim_params={}, solver_params={}, trials_folder=Path(__file__)):
     return metrics
 
 
-def solve(measurements, obs_operator, times, alpha):
-    H = obs_operator
-    z = measurements
-
+def initialize_values(measurements, times, sigma_z):
     delta_times = times[1:] - times[:-1]
     T = len(times)
-    Qinv = gen_Qinv(delta_times, alpha)
+    R = sigma_z
+    if isinstance(R, float) or isinstance(R, int):
+        R = R * sparse.eye(len(measurements))
+        Rinv = 1 / sigma_z * sparse.eye(len(measurements))
+    elif isinstance(R, np.ndarray):
+        print(R)
+        Rinv = np.linalg.inv(R)
+    else:
+        raise ValueError(
+            "meaurement variance sigma_z must either be a number or array."
+        )
     G = gen_G(delta_times)
-
-    H = sparse.lil_matrix((T, 2 * T))
-    H[:, 1::2] = sparse.eye(T)
-
-    rhs = H.T @ z.reshape((-1, 1))
-    lhs = H.T @ H + G.T @ Qinv @ G
-    sol = np.linalg.solve(lhs.toarray(), rhs)
-    x_hat = (H @ sol).flatten()
-    x_dot_hat = (H[:, list(range(1, 2 * T)) + [0]] @ sol).flatten()
-    return x_hat, x_dot_hat, G, Qinv
+    return delta_times, T, R, Rinv, G
 
 
 def gen_G(delta_times):
@@ -106,25 +103,42 @@ def gen_G(delta_times):
     return sparse.hstack((G_left, align_cols)) + sparse.hstack((align_cols, G_right))
 
 
-def gen_Qinv(delta_times, alpha):
+def gen_Qinv(delta_times, sigma_x):
     Qs = [
         np.array([[dt, dt**2 / 2], [dt**2 / 2, dt**3 / 3]]) for dt in delta_times
     ]
-    Qinv = alpha * sparse.block_diag([np.linalg.inv(Q) for Q in Qs])
+    Qinv = sigma_x * sparse.block_diag([np.linalg.inv(Q) for Q in Qs])
     return (Qinv + Qinv.T) / 2  # ensure symmetry
 
 
-def solve_prior(measurements, obs_operator, times, alpha, sigma_tilde, x0=None):
-    H = obs_operator
-    z = measurements
-    T = len(times)
+def solve(measurements, obs_operator, times, sigma_z, sigma_x):
+    H, z, delta_times, T, R, Rinv, G = (
+        obs_operator,
+        measurements,
+        *initialize_values(measurements, times, sigma_z),
+    )
+    Qinv = gen_Qinv(delta_times, sigma_x)
+
+    rhs = H.T @ Rinv @ z.reshape((-1, 1))
+    lhs = H.T @ Rinv @ H + G.T @ Qinv @ G
+    sol = np.linalg.solve(lhs.toarray(), rhs)
+    x_hat = (H @ sol).flatten()
+    x_dot_hat = (H[:, list(range(1, 2 * T)) + [0]] @ sol).flatten()
+    return x_hat, x_dot_hat, G, Qinv
+
+
+def solve_prior(
+    measurements, obs_operator, times, sigma_z, sigma_x=1, sigma_tilde=1, x0=None
+):
+    H, z, delta_times, T, R, Rinv, G = (
+        obs_operator,
+        measurements,
+        *initialize_values(measurements, times, sigma_z),
+    )
     eps = 0.1
     if x0 is None:
         x0 = np.zeros((2 * T, 1))
-    delta_times = times[1:] - times[:-1]
-    Qinv = gen_Qinv(delta_times, 1)
-    G = gen_G(delta_times)
-    Rinv = np.eye(len(measurements))
+    Qinv = gen_Qinv(delta_times, sigma_x)
     # Precomputations
     Sigma = H.T @ Rinv @ H
     Pi = G.T @ Qinv @ G
