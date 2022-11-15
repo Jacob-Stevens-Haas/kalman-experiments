@@ -14,6 +14,25 @@ def register_tuner(name):
     return decorator
 
 
+def gen_sine(seed, *, stop=1, dt=None, nt=None, meas_var=0.1):
+    """Generate (deterministic) sine trajectory and (random) measurements"""
+    rng = np.random.default_rng(seed)
+    if dt is None and nt is None:
+        raise ValueError("Either dt or nt must be provided")
+    elif nt is not None:
+        times = np.linspace(0, stop, nt)
+        dt = times[1] - times[0]
+    else:
+        times = np.arange(0, stop, dt)
+    n = len(times)
+    x_true = np.sin(times)
+    x_dot_true = np.cos(times)
+    measurements = rng.normal(x_true, meas_var)
+    H = sparse.lil_matrix((n, 2 * n))
+    H[:, 1::2] = sparse.eye(n)
+    return measurements, x_true, x_dot_true, H, times
+
+
 def gen_data(seed, *, stop=1, dt=None, nt=None, meas_var=0.1, process_var=1):
     """Generate trajectory and measurements for a Kalman process.
 

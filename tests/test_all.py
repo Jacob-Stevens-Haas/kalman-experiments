@@ -73,7 +73,7 @@ def test_solve(sample_data, sigma_z, sigma_x):
     n = len(x_true)
     x_solve = kal_exp.restack(x_hat, x_dot_hat)
     G_dagger = np.linalg.pinv(G.toarray())
-    sigma_z = 1
+    sigma_z = 1 # since solve puts it all into Q, not R
     R = sigma_z * np.eye(len(measurements))
     Rinv = 1/sigma_z * np.eye(len(measurements))
     Q = np.linalg.inv(Qinv.toarray())
