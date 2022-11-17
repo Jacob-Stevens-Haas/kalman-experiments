@@ -58,9 +58,17 @@ def test_gen_data_normal(sample_data, sigma_x):
 def test_solve(sample_data, sigma_z, sigma_x):
     measurements, x_true, x_dot_true, H, times = sample_data
     x_hat, x_dot_hat, G, Qinv = kal_exp.solve(measurements, H, times, sigma_z, sigma_x)
-    mse = np.sqrt(np.linalg.norm(x_hat-x_true) ** 2 / len(x_true))
-    assert mse < .05
+    mse = np.sqrt(np.linalg.norm(x_hat - x_true) ** 2 / len(x_true))
+    assert mse < 0.05
 
+
+def test_solve_prior(sample_data, sigma_z, sigma_x):
+    measurements, x_true, x_dot_true, H, times = sample_data
+    x_hat, x_dot_hat, G, Qinv = kal_exp.solve_prior(
+        measurements, H, times, sigma_z, sigma_x
+    )
+    mse = np.sqrt(np.linalg.norm(x_hat - x_true) ** 2 / len(x_true))
+    assert mse < 0.05
 
 
 def test_solve_variance(sample_data, sigma_z, sigma_x):
