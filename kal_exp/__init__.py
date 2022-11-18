@@ -59,7 +59,8 @@ def gen_data(seed, *, stop=1, dt=None, nt=None, meas_var=0.1, process_var=1):
     x_dot_true = np.concatenate((np.zeros(1), dx_dot.cumsum()))
     dx = H[:-1, :-2] @ x + dt * x_dot_true[:-1]
     x_true = np.concatenate((np.zeros(1), dx.cumsum()))
-    measurements = rng.normal(x_true, meas_var)
+    meas_stdev = np.sqrt(meas_var)
+    measurements = rng.normal(x_true, meas_stdev)
 
     return measurements, x_true, x_dot_true, H, times
 
@@ -174,60 +175,67 @@ def solve_prior(
         lambda x: objective(x.reshape((-1, 1))),
         x0.flatten(),
         jac=lambda x: grad(x.reshape((-1, 1))).flatten(),
-    )
+    ).x.reshape((-1,1))
     sigma_hat = sigma_of_x(x)
     x_hat, x_dot_hat = unstack(x)
     return x_hat, x_dot_hat, G, Qinv, sigma_hat
 
 
 def solve_marginal(
-    measurements, obs_operator, times, sigma_z, sigma0=None, maxiter=100
+    measurements, obs_operator, times, sigma_z, sigma0=1, maxiter=100
 ):
     H, z, delta_times, T, R, Rinv, G = (
         obs_operator,
         measurements.reshape((-1, 1)),
         *initialize_values(measurements, times, sigma_z),
     )
-    if x0 is None:
-        x0 = np.zeros((2 * T, 1))
-    Qinv = gen_Qinv(delta_times)
+    Qinv = gen_Qinv(delta_times, 1)
     # Precomputations
     Theta = H.T @ Rinv @ H
     Pi = G.T @ Qinv @ G
     rhs = H.T @ Rinv @ z
-    temp_vec = G @ np.linalg.inv(H.T @ H + G.T @ G) @ H.T @ z
-    alpha = temp_vec.T @ Qinv @ temp_vec
+    temp_vec = G @ np.linalg.inv((H.T @ H + G.T @ G).toarray()) @ H.T @ z
+    alpha = (temp_vec.T @ Qinv @ temp_vec)[0, 0]
 
     def grad(sigma):
         # Technically, grad * sigma^2 to remove denominator
-        trace_inverse = np.trace(np.linalg.inv(Theta + Pi / sigma) @ Pi)
-        return (T - 1) * sigma - alpha - trace_inverse
+        trace_inverse = np.trace(np.linalg.inv((Theta + Pi / sigma).toarray()) @ Pi)
+        return (T-1)/sigma - alpha/sigma**2 - 1 / 2 / sigma**2 * trace_inverse
+        # return ((T - 1) * sigma - alpha - 1/2 * trace_inverse)
 
     def objective(sigma):
         # ||Hx - z||_Rinv^2 + (T+1+eps)*log(||Gx||^2_Qinv + (2+2eps)*sigma_tilde)
         return (
             (T - 1) * np.log(sigma)
-            + alpha / sigma**2
-            + 1 / 2 * np.log(np.linalg.det(Theta + 1 / sigma * Pi))
-        )[0, 0]
+            + alpha / sigma
+            + 1 / 2 * np.log(np.linalg.det((Theta + 1 / sigma * Pi).toarray()))
+        )
 
     def x_of_sigma(sigma):
-        lhs = Theta + 1 / sigma * Pi
+        lhs = (Theta + 1 / sigma * Pi).toarray()
         return np.linalg.solve(lhs, rhs)
 
     g0 = grad(sigma0)
     if g0 < 0:
-        right = find_right_bound(sigma0)
         left = sigma0
+        while left < 1e10:
+            right = left * 10
+            if grad(right) > 0:
+                break 
+            left = right
     elif g0 > 0:
-        left = find_left_bound(sigma0)
         right = sigma0
+        while right > 1e-10:
+            left = right / 10
+            if grad(left) > 0:
+                break
+            right = left
     elif g0 == 0:
         raise ValueError("You're cheating!!!")
     else:
         raise TypeError("NAAAAAAAN")
 
-    abs_tol = 1e-6
+    abs_tol = 1e-16
     for i in range(maxiter):
         midpoint = (left + right) / 2
         gmid = grad(midpoint)
@@ -241,7 +249,7 @@ def solve_marginal(
             raise TypeError("NAAAAAAAN")
         objmid = objective(midpoint)
         print(f"feval: {objmid:.5} \u03C3\u00B2 estimated as {midpoint:.2}")
-        if np.abs(objmid) < abs_tol:
+        if np.abs(gmid) < abs_tol:
             print("Minimizer found in iter ", i)
             break
 

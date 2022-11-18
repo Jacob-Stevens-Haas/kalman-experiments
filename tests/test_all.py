@@ -1,3 +1,4 @@
+import warnings
 import pytest
 import scipy
 
@@ -17,6 +18,11 @@ def sigma_x():
     return 1
 
 
+@pytest.fixture
+def seed():
+    return 7
+
+
 def test_restack():
     x = np.array([[1, 2], [3, 4]])
     x_dot = np.array([[5, 6], [7, 8]])
@@ -33,11 +39,11 @@ def test_restack():
 
 
 @pytest.fixture
-def sample_data(sigma_z, sigma_x):
-    return kal_exp.gen_data(1, nt=20, meas_var=sigma_z, process_var=sigma_x)
+def sample_data(sigma_z, sigma_x, seed):
+    return kal_exp.gen_data(seed, nt=20, meas_var=sigma_z, process_var=sigma_x)
 
 
-def test_gen_data_normal(sample_data, sigma_x):
+def test_gen_data_normal(sample_data, sigma_x, sigma_z):
     measurements, x_true, x_dot_true, H, times = sample_data
 
     # Kolmogorov Smirnov test for normality of marginal distributions
@@ -54,10 +60,26 @@ def test_gen_data_normal(sample_data, sigma_x):
     assert p_x > 0.05
     assert p_xdot > 0.05
 
+    x_orig = kal_exp.restack(x_true, x_dot_true)
+    dz = measurements - H @ x_orig
+    # prematrix = root_pinv(sigma_z * np.eye(len(dz)))
+    p_z = stats.kstest(sigma_z**-.5 * dz, stats.norm.cdf).pvalue
+    assert p_z > .05
+
+
 
 def test_solve(sample_data, sigma_z, sigma_x):
     measurements, x_true, x_dot_true, H, times = sample_data
     x_hat, x_dot_hat, G, Qinv = kal_exp.solve(measurements, H, times, sigma_z, sigma_x)
+    mse = np.sqrt(np.linalg.norm(x_hat - x_true) ** 2 / len(x_true))
+    assert mse < 0.05
+
+
+def test_solve_marginal(sample_data, sigma_z, sigma_x):
+    measurements, x_true, x_dot_true, H, times = sample_data
+    x_hat, x_dot_hat, G, Qinv, sigma_hat = kal_exp.solve_marginal(
+        measurements, H, times, sigma_z
+    )
     mse = np.sqrt(np.linalg.norm(x_hat - x_true) ** 2 / len(x_true))
     assert mse < 0.05
 
@@ -92,20 +114,22 @@ def test_solve_variance(sample_data, sigma_z, sigma_x):
 
     n = len(x_true)
     x_solve = kal_exp.restack(x_hat, x_dot_hat)
+    # x_ttrue = kal_exp.restack(x_true, x_dot_true)
     G_dagger = np.linalg.pinv(G.toarray())
-    sigma_z = 1  # since solve puts it all into Q, not R
     R = sigma_z * np.eye(len(measurements))
     Rinv = 1 / sigma_z * np.eye(len(measurements))
     Q = np.linalg.inv(Qinv.toarray())
     var_x = G_dagger @ Q @ G_dagger.T
+    prematrix = root_pinv(var_x)
 
-    x_true_norm = np.linalg.pinv(np.linalg.cholesky(var_x)) @ kal_exp.restack(
+    x_true_norm = prematrix @ kal_exp.restack(
         x_true, x_dot_true
     )
     p_x = stats.kstest(x_true_norm, stats.norm.cdf).pvalue
     assert p_x > 0.05
 
     var_z = R + H @ var_x @ H.T  # at 30 timepoints, condition: 5.6e0
+    prematrix = root_pinv(var_z)
 
     meas_normalized = np.linalg.inv(np.linalg.cholesky(var_z)) @ measurements
     p_z = stats.kstest(meas_normalized, stats.norm.cdf).pvalue
@@ -114,19 +138,45 @@ def test_solve_variance(sample_data, sigma_z, sigma_x):
     hessian = G.T @ Qinv @ G + H.T @ Rinv @ H
     hess_inv = np.linalg.inv(hessian)  # at 30 timepoints, condition:1.2e6
     var_x_hat = hess_inv @ H.T @ Rinv @ var_z @ Rinv @ H @ hess_inv
-
+    max_cond = np.log(np.linalg.cond(hessian) ** 2 * np.linalg.cond(var_z)) / np.log(10)
+    prematrix = root_pinv(var_x_hat, 10 ** (max_cond-16))
     # Need to form the root pseudoinverse of var_x_hat
-    L_perm, D, perm = scipy.linalg.ldl(var_x_hat)
-    L_p_inv = np.linalg.inv(L_perm)
+    # L_perm, D, perm = scipy.linalg.ldl(var_x_hat)
+    # L_p_inv = np.linalg.inv(L_perm)
 
-    max_cond = np.linalg.cond(hessian) ** 2 * np.linalg.cond(var_z)
-    D_diag = np.diagonal(D)
-    D_diag_log = np.log(np.abs(D_diag)) / np.log(10)
-    D_log_max = D_diag_log.max()
-    cond_cutoff_exponent = D_log_max - 16 + np.log(max_cond) / np.log(10)
-    valid_D_indices = D_diag_log > cond_cutoff_exponent
-    D_tilde_root_inv = np.diag(D_diag[valid_D_indices] ** -0.5)
-
-    ind_normal = D_tilde_root_inv @ L_p_inv[valid_D_indices] @ x_solve
-    p_x_hat = stats.kstest(ind_normal, stats.norm.cdf).pvalue
+    # D_diag = np.diagonal(D)
+    # D_diag_log = np.log(np.abs(D_diag)) / np.log(10)
+    # D_log_max = D_diag_log.max()
+    # cond_cutoff_exponent = D_log_max - 16 + np.log(max_cond) / np.log(10)
+    # valid_D_indices = D_diag_log > cond_cutoff_exponent
+    # D_tilde_root_inv = np.diag(D_diag[valid_D_indices] ** -0.5)
+    
+    # est_normal = D_tilde_root_inv @ L_p_inv[valid_D_indices] @ x_solve
+    est_normal = prematrix @ x_solve
+    p_x_hat = stats.kstest(est_normal, stats.norm.cdf).pvalue
     assert p_x_hat > 0.05
+
+
+def root_pinv(Q, threshold=1e-15):
+    r"""Calculate the root pseudoinverse of matrix Q in R m x m using the SVD
+
+    If :math:`x \sim \mathcal N(0, Q)`, then 
+    :math:`\tilde U^T\Sigma^{-1/2}x\sim \mathcal N(0, I)` if 
+    :math:`Q=\tilde U\tilde\sigma\tilde U^T.
+
+    Q must be symmetric, though to make sense as a (singular) covariance, it must be
+    positive (semi) definite)
+
+    Arguments:
+        Q: The matrix to calculate
+        threshold: for determining rank of Q
+
+    Returns:
+        Qp_root, the k x m matrix where k is the rank of Q and the above equation holds.
+    """
+    U, s, _ = scipy.linalg.svd(Q)
+    s_diag_nonzero = s/s.max() > threshold
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "divide by zero", RuntimeWarning)
+        S_root_pinv = np.diag(s[s_diag_nonzero]**-.5)
+    return S_root_pinv @ U.T[s_diag_nonzero]
