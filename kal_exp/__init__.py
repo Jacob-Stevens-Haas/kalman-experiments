@@ -204,7 +204,6 @@ def solve_marginal(
         # return ((T - 1) * sigma - alpha - 1/2 * trace_inverse)
 
     def objective(sigma):
-        # ||Hx - z||_Rinv^2 + (T+1+eps)*log(||Gx||^2_Qinv + (2+2eps)*sigma_tilde)
         return (
             (T - 1) * np.log(sigma)
             + alpha / sigma

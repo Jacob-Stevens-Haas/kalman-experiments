@@ -20,7 +20,7 @@ def sigma_x():
 
 @pytest.fixture
 def seed():
-    return 7
+    return 5
 
 
 def test_restack():
@@ -71,8 +71,35 @@ def test_gen_data_normal(sample_data, sigma_x, sigma_z):
 def test_solve(sample_data, sigma_z, sigma_x):
     measurements, x_true, x_dot_true, H, times = sample_data
     x_hat, x_dot_hat, G, Qinv = kal_exp.solve(measurements, H, times, sigma_z, sigma_x)
-    mse = np.sqrt(np.linalg.norm(x_hat - x_true) ** 2 / len(x_true))
-    assert mse < 0.05
+    x_true_stack = kal_exp.restack(x_true, x_dot_true)
+    x_hat_stack = kal_exp.restack(x_hat, x_dot_hat)
+    err = x_hat_stack - x_true_stack
+    # x_hat is hessian_inv @ H.T @ Rinv @ z
+    # z is H @ x
+    # x_hat - x is (hessian_inv @ H.T @ Rinv @ H - I)x
+    # x is normal, mean 0, variance G_dagger @ Q @ G_dagger.T
+    # we write this as x is pinv(prematrix) @ N(0, I)
+    # Thus x_hat - x is (hessian_inv @ H.T @ Rinv @ H - I) @ pinv(prematrix) @ N(0, I)
+    #   aka: pinv(superprematrix) @ N(0, I)
+    # E[x_hat - x] = 0
+    # E[(x_hat-x)(x_hat-x).T] = pinv(superprematrix) @ pinv(superprematrix).T
+    # Thus, superprematrix @ (x_hat - x) \sim N(0, I)
+    T = len(x_true)
+    G_dagger = np.linalg.pinv(G.toarray())
+    R = sigma_z * np.eye(len(measurements))
+    Rinv = 1 / sigma_z * np.eye(len(measurements))
+    Q = np.linalg.inv(Qinv.toarray())
+
+    hessian = G.T @ Qinv @ G + H.T @ Rinv @ H
+    hess_inv = np.linalg.inv(hessian)  # at 30 timepoints, condition:1.2e6
+
+    err_mat = (hess_inv @ H.T @ Rinv @ H - np.eye(2 * T)) @ G_dagger
+    var_err = err_mat @ Q @ err_mat.T
+    max_cond = np.log(np.linalg.cond(err_mat) ** 2 * np.linalg.cond(Q)) / np.log(10)
+    prematrix = root_pinv(var_err, 10 ** (max_cond-16))
+    
+    p_err = stats.kstest(prematrix @ err, stats.norm.cdf).pvalue
+    assert p_err > 0.05
 
 
 def test_solve_marginal(sample_data, sigma_z, sigma_x):
