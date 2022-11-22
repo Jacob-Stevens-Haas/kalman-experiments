@@ -309,7 +309,7 @@ def grad_descent(f, x0, grad, rel_tol, abs_tol, maxiter):
         x_plus = x - LR * nabla_x
         obj_val_plus = f(x)
         abs_err = np.linalg.norm(x - x_plus)
-        rel_err = abs_err / min(np.linalg.norm(x), 1)
+        rel_err = abs_err / max(np.linalg.norm(x), 1e-2)
         print("feval: ", obj_val)  # , " \u03C3\u00B2 estimated ", sigma_of_x(x))
         x = x_plus
         if abs_err < abs_tol or rel_err < rel_tol:
