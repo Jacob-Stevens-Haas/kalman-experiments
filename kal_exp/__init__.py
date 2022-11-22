@@ -148,22 +148,8 @@ def solve_prior(
     log_coef = T + 1 + eps
     log_add = (2 + 2 * eps) * sigma_tilde
 
-    def grad(x):
-        return (
-            # H.T @ Rinv @ (H @ x - z)
-            Theta @ x
-            - subtract
-            # + (T+1+eps)* np.log((x.T @ G.T @ Qinv @ G @ x) + (2+2*eps)*sigma_tilde)
-            + log_coef * Pi @ x / ((x.T @ Pi @ x) + log_add)
-        )
-
-    def objective(x):
-        # ||Hx - z||_Rinv^2 + (T+1+eps)*log(||Gx||^2_Qinv + (2+2eps)*sigma_tilde)
-        return (
-            x.T @ Pi @ x
-            - 2 * subtract.T @ x
-            + log_coef * np.log(x.T @ Pi @ x + log_add)
-        )[0, 0]
+    grad = prior_grad(Pi, Theta, subtract, log_coef, log_add)
+    objective = prior_obj(Pi, subtract, log_coef, log_add)
 
     def sigma_of_x(x):
         return ((x.T @ Pi @ x + log_add) / 2 / log_coef)[0, 0]
@@ -179,6 +165,28 @@ def solve_prior(
     sigma_hat = sigma_of_x(x)
     x_hat, x_dot_hat = unstack(x)
     return x_hat, x_dot_hat, G, Qinv, sigma_hat
+
+
+def prior_obj(Pi, subtract, log_coef, log_add):
+    def objective(x):
+        return (
+            x.T @ Pi @ x
+            - 2 * subtract.T @ x
+            + log_coef * np.log(x.T @ Pi @ x + log_add)
+        )[0, 0]
+    return objective
+
+
+def prior_grad(Pi, Theta, subtract, log_coef, log_add):
+    def grad(x):
+        return (
+            # H.T @ Rinv @ (H @ x - z)
+            Theta @ x
+            - subtract
+            # + (T+1+eps)* np.log((x.T @ G.T @ Qinv @ G @ x) + (2+2*eps)*sigma_tilde)
+            + log_coef * Pi @ x / ((x.T @ Pi @ x) + log_add)
+        )
+    return grad
 
 
 def solve_marginal(
@@ -197,18 +205,8 @@ def solve_marginal(
     temp_vec = G @ np.linalg.inv((H.T @ H + G.T @ G).toarray()) @ H.T @ z
     alpha = (temp_vec.T @ Qinv @ temp_vec)[0, 0]
 
-    def grad(sigma):
-        # Technically, grad * sigma^2 to remove denominator
-        trace_inverse = np.trace(np.linalg.inv((Theta + Pi / sigma).toarray()) @ Pi)
-        return (T-1)/sigma - alpha/sigma**2 - 1 / 2 / sigma**2 * trace_inverse
-        # return ((T - 1) * sigma - alpha - 1/2 * trace_inverse)
-
-    def objective(sigma):
-        return (
-            (T - 1) * np.log(sigma)
-            + alpha / sigma
-            + 1 / 2 * np.log(np.linalg.det((Theta + 1 / sigma * Pi).toarray()))
-        )
+    grad = marg_grad(T, Theta, Pi, alpha)
+    objective = marg_obj(T, Theta, Pi, alpha)
 
     def x_of_sigma(sigma):
         lhs = (Theta + 1 / sigma * Pi).toarray()
@@ -256,6 +254,24 @@ def solve_marginal(
 
     x_hat, x_dot_hat = unstack(x)
     return x_hat, x_dot_hat, G, Qinv, midpoint
+
+
+def marg_grad(T, Theta, Pi, alpha):
+    def grad(sigma):
+        # Technically, grad * sigma^2 to remove denominator
+        trace_inverse = np.trace(np.linalg.inv((Theta + Pi / sigma).toarray()) @ Pi)
+        return (T-1)/sigma - alpha/sigma**2 - 1 / 2 / sigma**2 * trace_inverse
+        # return ((T - 1) * sigma - alpha - 1/2 * trace_inverse)
+    return grad
+
+
+def marg_obj(T, Theta, Pi, alpha):
+    def objective(sigma):
+        return (
+            (T - 1) * np.log(sigma)
+            + alpha / sigma
+            + 1 / 2 * np.log(np.linalg.det((Theta + 1 / sigma * Pi).toarray()))
+        )
 
 
 def linesearch(x0, x1, objective):
@@ -321,3 +337,22 @@ def unstack(x):
     Assumes first axis is time.
     """
     return x[1::2].flatten(), x[::2].flatten()
+
+
+def gradient_test(f, g, x0):
+    """Verifies that analytic function f matches gradient function g"""
+    if isinstance(x0, np.ndarray):
+        h = np.ones_like(x0) / np.linalg.norm(x0) / 1e2
+    else: # x0 is float or int
+        h = x0/1e2
+    return (f(x0 + h) - f(x0 - h))/2, np.dot(h, g(x0))
+
+
+def complex_step_test(f, g, x0):
+    """Verifies that analytic function f matches gradient function g"""
+    if isinstance(x0, np.ndarray):
+        h = np.ones_like(x0) / np.linalg.norm(x0) / 1e2
+    else: # x0 is float or int
+        h = x0/1e2
+    h = h * 1j
+    return f(x0 + h).imag, np.dot(h, g(x0))
