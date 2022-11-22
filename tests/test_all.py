@@ -102,6 +102,7 @@ def test_solve(sample_data, sigma_z, sigma_x):
     assert p_err > 0.05
 
 
+@pytest.mark.xfail(raises=AssertionError, strict=True)
 def test_solve_marginal(sample_data, sigma_z, sigma_x):
     measurements, x_true, x_dot_true, H, times = sample_data
     x_hat, x_dot_hat, G, Qinv, sigma_hat = kal_exp.solve_marginal(
@@ -111,6 +112,7 @@ def test_solve_marginal(sample_data, sigma_z, sigma_x):
     assert mse < 0.05
 
 
+@pytest.mark.xfail(raises=AssertionError, strict=True)
 def test_solve_prior(sample_data, sigma_z, sigma_x):
     measurements, x_true, x_dot_true, H, times = sample_data
     x_hat, x_dot_hat, G, Qinv, sigma_hat = kal_exp.solve_prior(

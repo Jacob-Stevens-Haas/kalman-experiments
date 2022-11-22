@@ -258,7 +258,7 @@ def solve_marginal(
 
 def alpha_proj(G, H, z, Qinv):
     temp_vec = G @ np.linalg.inv((H.T @ H + G.T @ G).toarray()) @ H.T @ z
-    return temp_vec.T @ Qinv @ temp_vec
+    return 1/2 * temp_vec.T @ Qinv @ temp_vec
 
 
 def marg_grad(T, Theta, Pi, alpha):
