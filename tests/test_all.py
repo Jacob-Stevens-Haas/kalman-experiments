@@ -113,7 +113,7 @@ def test_solve_marginal(sample_data, sigma_z, sigma_x):
 
 def test_solve_prior(sample_data, sigma_z, sigma_x):
     measurements, x_true, x_dot_true, H, times = sample_data
-    x_hat, x_dot_hat, G, Qinv = kal_exp.solve_prior(
+    x_hat, x_dot_hat, G, Qinv, sigma_hat = kal_exp.solve_prior(
         measurements, H, times, sigma_z, sigma_x
     )
     mse = np.sqrt(np.linalg.norm(x_hat - x_true) ** 2 / len(x_true))
@@ -219,7 +219,7 @@ def test_map_gradient(seed, sample_data, sigma_z, sigma_x):
     sigma_tilde = 2
     log_coef = T + 1 + eps
     log_add = (2 + 2 * eps) * sigma_tilde
-    obj = kal_exp.prior_obj(Pi, subtract, log_coef, log_add)
+    obj = kal_exp.prior_obj(Theta, Pi, subtract, log_coef, log_add)
     grad = kal_exp.prior_grad(Theta, Pi, subtract, log_coef, log_add)
     x0 = rng.normal(loc=kal_exp.restack(x_true, x_dot_true))
 

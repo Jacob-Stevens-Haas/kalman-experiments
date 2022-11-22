@@ -149,7 +149,7 @@ def solve_prior(
     log_add = (2 + 2 * eps) * sigma_tilde
 
     grad = prior_grad(Theta, Pi, subtract, log_coef, log_add)
-    objective = prior_obj(Pi, subtract, log_coef, log_add)
+    objective = prior_obj(Theta, Pi, subtract, log_coef, log_add)
 
     def sigma_of_x(x):
         return ((x.T @ Pi @ x + log_add) / 2 / log_coef)[0, 0]
@@ -167,10 +167,10 @@ def solve_prior(
     return x_hat, x_dot_hat, G, Qinv, sigma_hat
 
 
-def prior_obj(Pi, subtract, log_coef, log_add):
+def prior_obj(Theta, Pi, subtract, log_coef, log_add):
     def objective(x):
         return (
-            x.T @ Pi @ x
+            x.T @ Theta @ x
             - 2 * subtract.T @ x
             + log_coef * np.log(x.T @ Pi @ x + log_add)
         )
@@ -181,8 +181,8 @@ def prior_grad(Theta, Pi, subtract, log_coef, log_add):
     def grad(x):
         return (
             # H.T @ Rinv @ (H @ x - z)
-            Theta @ x
-            - subtract
+            2 * Theta @ x
+            - 2 * subtract
             # + (T+1+eps)* np.log((x.T @ G.T @ Qinv @ G @ x) + (2+2*eps)*sigma_tilde)
             + log_coef * Pi @ x / ((x.T @ Pi @ x) + log_add)
         )
@@ -244,7 +244,7 @@ def solve_marginal(
             raise ValueError("You're cheating!!!")
         else:
             raise TypeError("NAAAAAAAN")
-        objmid = objective(midpoint)
+        objmid = objective(midpoint)[0,0]
         print(f"feval: {objmid:.5} \u03C3\u00B2 estimated as {midpoint:.2}")
         if np.abs(gmid) < abs_tol:
             print("Minimizer found in iter ", i)
