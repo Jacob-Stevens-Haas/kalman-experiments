@@ -148,7 +148,7 @@ def solve_prior(
     log_coef = T + 1 + eps
     log_add = (2 + 2 * eps) * sigma_tilde
 
-    grad = prior_grad(Pi, Theta, subtract, log_coef, log_add)
+    grad = prior_grad(Theta, Pi, subtract, log_coef, log_add)
     objective = prior_obj(Pi, subtract, log_coef, log_add)
 
     def sigma_of_x(x):
@@ -173,11 +173,11 @@ def prior_obj(Pi, subtract, log_coef, log_add):
             x.T @ Pi @ x
             - 2 * subtract.T @ x
             + log_coef * np.log(x.T @ Pi @ x + log_add)
-        )[0, 0]
+        )
     return objective
 
 
-def prior_grad(Pi, Theta, subtract, log_coef, log_add):
+def prior_grad(Theta, Pi, subtract, log_coef, log_add):
     def grad(x):
         return (
             # H.T @ Rinv @ (H @ x - z)
@@ -202,8 +202,8 @@ def solve_marginal(
     Theta = H.T @ Rinv @ H
     Pi = G.T @ Qinv @ G
     rhs = H.T @ Rinv @ z
-    temp_vec = G @ np.linalg.inv((H.T @ H + G.T @ G).toarray()) @ H.T @ z
-    alpha = (temp_vec.T @ Qinv @ temp_vec)[0, 0]
+
+    alpha = alpha_proj(G, H, z, Qinv)
 
     grad = marg_grad(T, Theta, Pi, alpha)
     objective = marg_obj(T, Theta, Pi, alpha)
@@ -256,6 +256,11 @@ def solve_marginal(
     return x_hat, x_dot_hat, G, Qinv, midpoint
 
 
+def alpha_proj(G, H, z, Qinv):
+    temp_vec = G @ np.linalg.inv((H.T @ H + G.T @ G).toarray()) @ H.T @ z
+    return temp_vec.T @ Qinv @ temp_vec
+
+
 def marg_grad(T, Theta, Pi, alpha):
     def grad(sigma):
         # Technically, grad * sigma^2 to remove denominator
@@ -272,6 +277,7 @@ def marg_obj(T, Theta, Pi, alpha):
             + alpha / sigma
             + 1 / 2 * np.log(np.linalg.det((Theta + 1 / sigma * Pi).toarray()))
         )
+    return objective
 
 
 def linesearch(x0, x1, objective):
@@ -354,5 +360,4 @@ def complex_step_test(f, g, x0):
         h = np.ones_like(x0) / np.linalg.norm(x0) / 1e2
     else: # x0 is float or int
         h = x0/1e2
-    h = h * 1j
-    return f(x0 + h).imag, np.dot(h, g(x0))
+    return f(x0 + h*1j).imag, np.dot(h, g(x0))

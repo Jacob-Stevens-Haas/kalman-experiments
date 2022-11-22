@@ -184,6 +184,52 @@ def test_solve_variance(sample_data, sigma_z, sigma_x):
     assert p_x_hat > 0.05
 
 
+def test_marginal_gradient(sample_data, sigma_z, sigma_x):
+    z, x_true, x_dot_true, H, times = sample_data
+    delta_times = times[1:] - times[:-1]
+    G = kal_exp.gen_G(delta_times)
+    Qinv = kal_exp.gen_Qinv(delta_times, sigma_x)
+    T = len(times)
+    Rinv = 1/ sigma_z * scipy.sparse.eye(T)
+    Theta = H.T @ Rinv @ H
+    Pi = G.T @ Qinv @ G
+    alpha = kal_exp.alpha_proj(G, H, z, Qinv)
+    obj = kal_exp.marg_obj(T, Theta, Pi, alpha)
+    grad = kal_exp.marg_grad(T, Theta, Pi, alpha)
+    x0 = 10
+    lhs, rhs = kal_exp.gradient_test(obj, grad, x0)
+    assert np.abs(lhs/rhs-1) < 1e-3
+
+    lhs, rhs = kal_exp.complex_step_test(obj, grad, x0)
+    assert np.abs(lhs/rhs-1) < 1e-3
+
+
+def test_map_gradient(seed, sample_data, sigma_z, sigma_x):
+    z, x_true, x_dot_true, H, times = sample_data
+    rng = np.random.default_rng(seed)
+    delta_times = times[1:] - times[:-1]
+    G = kal_exp.gen_G(delta_times)
+    Qinv = kal_exp.gen_Qinv(delta_times, sigma_x)
+    T = len(times)
+    Rinv = 1/ sigma_z * scipy.sparse.eye(T)
+    Theta = H.T @ Rinv @ H
+    Pi = G.T @ Qinv @ G
+    subtract = H.T @ Rinv @ z
+    eps = .1
+    sigma_tilde = 2
+    log_coef = T + 1 + eps
+    log_add = (2 + 2 * eps) * sigma_tilde
+    obj = kal_exp.prior_obj(Pi, subtract, log_coef, log_add)
+    grad = kal_exp.prior_grad(Theta, Pi, subtract, log_coef, log_add)
+    x0 = rng.normal(loc=kal_exp.restack(x_true, x_dot_true))
+
+    lhs, rhs = kal_exp.gradient_test(obj, grad, x0)
+    assert np.abs(lhs/rhs-1) < 1e-3
+
+    lhs, rhs = kal_exp.complex_step_test(obj, grad, x0)
+    assert np.abs(lhs/rhs-1) < 1e-3
+
+
 def root_pinv(Q, threshold=1e-15):
     r"""Calculate the root pseudoinverse of matrix Q in R m x m using the SVD
 
