@@ -227,10 +227,6 @@ def solve_marginal(
             if grad(left) > 0:
                 break
             right = left
-    elif g0 == 0:
-        raise ValueError("You're cheating!!!")
-    else:
-        raise TypeError("NAAAAAAAN")
 
     abs_tol = 1e-16
     for i in range(maxiter):
@@ -240,10 +236,6 @@ def solve_marginal(
             left = midpoint
         elif gmid > 0:
             right = midpoint
-        elif gmid == 0:
-            raise ValueError("You're cheating!!!")
-        else:
-            raise TypeError("NAAAAAAAN")
         objmid = objective(midpoint)[0,0]
         print(f"feval: {objmid:.5} \u03C3\u00B2 estimated as {midpoint:.2}")
         if np.abs(gmid) < abs_tol:
