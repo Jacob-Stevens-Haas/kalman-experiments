@@ -226,10 +226,10 @@ def test_map_gradient(seed, sample_data, sigma_z, sigma_x):
     x0 = rng.normal(loc=kal_exp.restack(x_true, x_dot_true))
 
     lhs, rhs = kal_exp.gradient_test(obj, grad, x0)
-    assert np.abs(lhs/rhs-1) < 1e-3
+    assert np.abs(lhs/rhs-1) < 1e-7
 
     lhs, rhs = kal_exp.complex_step_test(obj, grad, x0)
-    assert np.abs(lhs/rhs-1) < 1e-3
+    assert np.abs(lhs/rhs-1) < 1e-7
 
 
 def root_pinv(Q, threshold=1e-15):

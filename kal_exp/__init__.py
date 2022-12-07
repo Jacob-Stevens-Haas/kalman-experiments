@@ -184,7 +184,7 @@ def prior_grad(Theta, Pi, subtract, log_coef, log_add):
             2 * Theta @ x
             - 2 * subtract
             # + (T+1+eps)* np.log((x.T @ G.T @ Qinv @ G @ x) + (2+2*eps)*sigma_tilde)
-            + log_coef * Pi @ x / ((x.T @ Pi @ x) + log_add)
+            + log_coef * 2 * Pi @ x / ((x.T @ Pi @ x) + log_add)
         )
     return grad
 
