@@ -130,7 +130,7 @@ def solve(measurements, obs_operator, times, sigma_z, sigma_x):
 
 
 def solve_prior(
-    measurements, obs_operator, times, sigma_z, sigma_tilde=1, x0=None, maxiter=100
+    measurements, obs_operator, times, sigma_z, sigma_tilde=1, x0=None
 ):
     H, z, delta_times, T, R, Rinv, G = (
         obs_operator,
@@ -154,16 +154,13 @@ def solve_prior(
     def sigma_of_x(x):
         return ((x.T @ Pi @ x + log_add) / 2 / log_coef)[0, 0]
 
-    abs_tol = 1e-6
-    rel_tol = 1e-3
-    x = grad_descent(objective, x0, grad, rel_tol, abs_tol, maxiter)
-    alt_x = optimize.minimize(
+    x_sol = optimize.minimize(
         lambda x: objective(x.reshape((-1, 1))),
         x0.flatten(),
         jac=lambda x: grad(x.reshape((-1, 1))).flatten(),
     ).x.reshape((-1,1))
-    sigma_hat = sigma_of_x(x)
-    x_hat, x_dot_hat = unstack(x)
+    sigma_hat = sigma_of_x(x_sol)
+    x_hat, x_dot_hat = unstack(x_sol)
     return x_hat, x_dot_hat, G, Qinv, sigma_hat
 
 
@@ -270,51 +267,6 @@ def marg_obj(T, Theta, Pi, alpha):
             + 1 / 2 * np.log(np.linalg.det((Theta + 1 / sigma * Pi).toarray()))
         )
     return objective
-
-
-def linesearch(x0, x1, objective):
-    # not guaranteed for nonconvex problem, even for local minima
-    gamma0 = 0.5
-    gamma = gamma0
-    o0 = objective(x0)
-    o1 = objective(x1)
-    maxiter = 10
-    for i in range(maxiter):
-        x_new = gamma * x1 + (1 - gamma) * x0
-        o_new = objective(x_new)
-        if o_new < gamma * o1 + (1 - gamma) * o0:
-            print("linesearch found in iter ", i)
-            break
-        gamma *= gamma0
-    else:
-        print("linesearch not found")
-        return False
-    return x_new
-
-
-def grad_descent(f, x0, grad, rel_tol, abs_tol, maxiter):
-    x = x0
-    LR = 1e-3
-    obj_val = np.inf
-    for i in range(maxiter):
-        nabla_x = grad(x)
-        x_plus = x - LR * nabla_x
-        obj_val_plus = f(x)
-        abs_err = np.linalg.norm(x - x_plus)
-        rel_err = abs_err / max(np.linalg.norm(x), 1e-2)
-        print("feval: ", obj_val)  # , " \u03C3\u00B2 estimated ", sigma_of_x(x))
-        x = x_plus
-        if abs_err < abs_tol or rel_err < rel_tol:
-            print("Minimizer found in iter ", i)
-            break
-        if obj_val_plus > obj_val:
-            x_plus = linesearch(x, x_plus, f)
-            if x_plus is None:
-                x_plus = x
-            LR = 0.1 * LR
-            print("decreasing learning rate to ", LR)
-        obj_val = obj_val_plus
-    return x_plus
 
 
 def restack(x, x_dot):
