@@ -204,10 +204,26 @@ def solve_marginal(
 
     grad = marg_grad(T, Theta, Pi, alpha)
     objective = marg_obj(T, Theta, Pi, alpha)
+    grad_scaled = marg_grad_scaled(T, Theta, Pi, alpha)
+    second_d = marg_2ndd_scaled(T, Theta, Pi)
 
     def x_of_sigma(sigma):
         lhs = (Theta + 1 / sigma * Pi).toarray()
         return np.linalg.solve(lhs, rhs)
+
+    sigma_min = optimize.minimize_scalar(
+        fun=objective,
+        bracket=(1e-9, 1e9)
+    ).x[0,0]
+    x_min = x_of_sigma(sigma_min)
+
+    sigma_root = optimize.root_scalar(
+        grad_scaled,
+        fprime=second_d,
+        method="newton",
+        x0=sigma0,
+    ).root[0,0]
+    x_root = x_of_sigma(sigma_root)
 
     g0 = grad(sigma0)
     if g0 < 0:
@@ -252,19 +268,41 @@ def alpha_proj(G, H, z, Qinv):
 
 def marg_grad(T, Theta, Pi, alpha):
     def grad(sigma):
-        # Technically, grad * sigma^2 to remove denominator
         trace_inverse = np.trace(np.linalg.inv((Theta + Pi / sigma).toarray()) @ Pi)
         return (T-1)/sigma - alpha/sigma**2 - 1 / 2 / sigma**2 * trace_inverse
-        # return ((T - 1) * sigma - alpha - 1/2 * trace_inverse)
     return grad
+
+
+def marg_grad_scaled(T, Theta, Pi, alpha):
+    """Marginal likelihood gradient, multiplied by positive (sigma^2)^2"""
+    def grad(sigma):
+        # Technically, grad * sigma^2 to remove denominator
+        if not isinstance(sigma, float):
+            sigma = sigma[0,0]
+        trace_inverse = np.trace(np.linalg.inv((Theta + Pi / sigma).toarray()) @ Pi)
+        return (T-1) * sigma - alpha - 1/2 * trace_inverse
+    return grad
+
+
+def marg_2ndd_scaled(T, Theta, Pi):
+    """Marginal likelihood Hessian, from gradient multiplied by positive (sigma^2)^2"""
+    def second_deriv(sigma):
+        if not isinstance(sigma, float):
+            sigma = sigma[0,0]
+        inv = np.linalg.inv((Theta + Pi / sigma).toarray())
+        trace_inverse = np.trace(inv @ Pi @ inv @ Pi)
+        return (T-1) + 1 / (2 * sigma ** 2) * trace_inverse
+    return second_deriv
 
 
 def marg_obj(T, Theta, Pi, alpha):
     def objective(sigma):
+        if not isinstance(sigma, float):
+            sigma = sigma[0,0]
         return (
             (T - 1) * np.log(sigma)
             + alpha / sigma
-            + 1 / 2 * np.log(np.linalg.det((Theta + 1 / sigma * Pi).toarray()))
+            + 1 / 2 * np.log(np.linalg.det((Theta + Pi/sigma).toarray()))
         )
     return objective
 
